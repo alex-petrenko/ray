@@ -25,6 +25,7 @@ tf = try_import_tf()
 logger = logging.getLogger(__name__)
 
 BEHAVIOUR_LOGITS = "behaviour_logits"
+OLD_POLICY_BEHAVIOUR_LOGITS = "old_policy_behaviour_logits"
 
 
 class VTraceLoss(object):

@@ -13,6 +13,8 @@ from ray.rllib.optimizers.aso_minibatch_buffer import MinibatchBuffer
 from ray.rllib.utils.timer import TimerStat
 from ray.rllib.utils.window_stat import WindowStat
 
+from ray.rllib.policy.sample_batch import SampleBatch, MultiAgentBatch
+
 
 class LearnerThread(threading.Thread):
     """Background thread that updates the local model from sample trajectories.
@@ -116,10 +118,31 @@ class APPOTracker(object):
 
     def update_batch(self, batch):
         if "old_policy_behaviour_logits" not in batch:
-            batch["old_policy_behaviour_logits"] = self.old_worker.policy_map[
-                'default_policy'].compute_actions(
-                    batch["obs"],
-                    prev_action_batch=batch["prev_actions"],
-                    prev_reward_batch=batch["prev_rewards"])[2][
-                        'behaviour_logits']
+            if isinstance(batch, MultiAgentBatch):
+                # TODO: implement multi-agent support
+                raise NotImplementedError("ASO learner does not work with non-trivial policy maps")
+
+            default_policy = self.old_worker.policy_map['default_policy']
+
+            # list of this policy's RNN state placeholders
+            state_inputs = default_policy._state_inputs
+
+            # this is a default naming convention used everywhere else
+            state_keys = [
+                "state_in_{}".format(i) for i in range(len(state_inputs))
+            ]
+
+            state_batches = []
+            for state_key in state_keys:
+                state_batches.append(batch[state_key])
+
+            policy_output = default_policy.compute_actions(
+                batch[SampleBatch.CUR_OBS],
+                state_batches=state_batches,
+                prev_action_batch=batch[SampleBatch.PREV_ACTIONS],
+                prev_reward_batch=batch[SampleBatch.PREV_REWARDS],
+            )
+
+            behaviour_logits = policy_output[2]["behaviour_logits"]
+            batch["old_policy_behaviour_logits"] = behaviour_logits
         return batch
